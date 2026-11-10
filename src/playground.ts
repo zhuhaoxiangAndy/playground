@@ -27,6 +27,7 @@ import {
 } from "./state";
 import {Example2D, shuffle} from "./dataset";
 import {AppendingLineChart} from "./linechart";
+import * as gpu from "./gpu";
 import * as d3 from 'd3';
 
 let mainWidth;
@@ -176,6 +177,20 @@ let lossTest = 0;
 let player = new Player();
 let lineChart = new AppendingLineChart(d3.select("#linechart"),
     ["#777", "black"]);
+
+// GPU (WebGPU) backend. When active, the training epoch and all inference
+// (loss + decision boundary) run on the GPU. Every other code path falls
+// back to the CPU implementation below.
+let gpuTrainer: gpu.GpuTrainer = null;
+let gpuStepBusy = false;
+let gpuInitStarted = false;
+/** Cached input grid for the decision boundary, keyed by input count. */
+let gpuGridInputs: Float32Array = null;
+let gpuGridKey: string = null;
+/** Bumped whenever the network is rebuilt, to cancel in-flight GPU steps. */
+let gpuGeneration = 0;
+let gpuResyncPending = false;
+let computeStatus = "CPU";
 
 function makeGUI() {
   d3.select("#reset-button").on("click", () => {
@@ -381,6 +396,7 @@ function makeGUI() {
     state.activation = activation;
     parametersChanged = true;
     reset();
+    updateComputeStatus();
   };
 
   d3.select("#apply-custom-activation").on("click", applyCustomActivation);
@@ -400,6 +416,7 @@ function makeGUI() {
     state.activation = activations[this.value];
     parametersChanged = true;
     reset();
+    updateComputeStatus();
   });
   activationDropdown.property("value",
       getKeyFromValue(activations, state.activation));
@@ -436,6 +453,37 @@ function makeGUI() {
     reset();
   });
   problem.property("value", getKeyFromValue(problems, state.problem));
+
+  // Compute backend controls (CPU / GPU) and the GPU usage throttle.
+  let deviceDropdown = d3.select("#compute-device").on("change", function() {
+    state.computeDevice = this.value;
+    state.serialize();
+    userHasInteracted();
+    if (state.computeDevice === "gpu") {
+      initGpu();
+      // Continue from the weights the JS network currently holds.
+      syncGpuNetwork();
+    }
+    updateComputeStatus();
+  });
+  if (state.computeDevice !== "cpu" && state.computeDevice !== "gpu") {
+    state.computeDevice = "cpu";
+  }
+  if (state.computeDevice === "gpu") {
+    initGpu();
+  }
+  deviceDropdown.property("value", state.computeDevice);
+
+  let usageSlider = d3.select("#gpu-usage").on("input", function() {
+    state.gpuUsage = +this.value;
+    d3.select("#gpu-usage-value").text(state.gpuUsage + "%");
+    state.serialize();
+    userHasInteracted();
+  });
+  state.gpuUsage = Math.max(10, Math.min(100, state.gpuUsage || 100));
+  usageSlider.property("value", state.gpuUsage);
+  d3.select("#gpu-usage-value").text(state.gpuUsage + "%");
+  updateComputeStatus();
 
   // Add scale to the gradient color map.
   let x = d3.scale.linear().domain([-1, 1]).range([0, 144]);
@@ -939,13 +987,16 @@ function getLoss(network: nn.Node[][], dataPoints: Example2D[]): number {
   return loss / dataPoints.length;
 }
 
-function updateUI(firstStep = false) {
+function updateUI(firstStep = false, updatedBoundary = false) {
   // Update the links visually.
   updateWeightsUI(network, d3.select("g.core"));
   // Update the bias values visually.
   updateBiasesUI(network);
-  // Get the decision boundary of the network.
-  updateDecisionBoundary(network, firstStep);
+  // Get the decision boundary of the network. The GPU path already filled
+  // `boundary` while it was computing, so it can skip the CPU recompute.
+  if (!updatedBoundary) {
+    updateDecisionBoundary(network, firstStep);
+  }
   let selectedId = selectedNodeId != null ?
       selectedNodeId : nn.getOutputNode(network).id;
   heatMap.updateBackground(boundary[selectedId], state.discretize);
@@ -998,6 +1049,44 @@ function constructInput(x: number, y: number): number[] {
 }
 
 function oneStep(): void {
+  if (useGpu()) {
+    // The GPU runs a whole epoch asynchronously. Skip frames while it is
+    // busy so we never overlap two epochs on the same buffers.
+    if (gpuStepBusy) {
+      return;
+    }
+    gpuStepBusy = true;
+    gpuOneStep().then(() => {
+      gpuStepBusy = false;
+      finishGpuStep();
+    }).catch((err) => {
+      gpuStepBusy = false;
+      console.error("GPU step failed, falling back to CPU.", err);
+      computeStatus = "GPU error - using CPU";
+      state.computeDevice = "cpu";
+      d3.select("#compute-device").property("value", "cpu");
+      updateComputeStatus();
+      finishGpuStep();
+      cpuOneStep();
+    });
+    return;
+  }
+  cpuOneStep();
+}
+
+/** Applies a network rebuild that had to wait for the GPU to go idle. */
+function finishGpuStep() {
+  if (gpuResyncPending) {
+    gpuResyncPending = false;
+    try {
+      syncGpuNetwork();
+    } catch (e) {
+      console.error("Failed to resync the GPU network.", e);
+    }
+  }
+}
+
+function cpuOneStep(): void {
   iter++;
   trainData.forEach((point, i) => {
     let input = constructInput(point.x, point.y);
@@ -1011,6 +1100,227 @@ function oneStep(): void {
   lossTrain = getLoss(network, trainData);
   lossTest = getLoss(network, testData);
   updateUI();
+}
+
+/** True when the current network can run on the WebGPU backend. */
+function useGpu(): boolean {
+  return state.computeDevice === "gpu" && gpuTrainer != null && gpuCompatible();
+}
+
+/** The GPU shaders only implement the built-in activation functions. */
+function gpuCompatible(): boolean {
+  return network != null && state.activation != null &&
+      gpu.activationId(state.activation) >= 0;
+}
+
+function getOutputActivation(): nn.ActivationFunction {
+  return (state.problem === Problem.REGRESSION) ?
+      nn.Activations.LINEAR : nn.Activations.TANH;
+}
+
+/** Creates the WebGPU device once, on demand. */
+function initGpu() {
+  if (gpuInitStarted || gpuTrainer != null) {
+    return;
+  }
+  gpuInitStarted = true;
+  computeStatus = "Initializing GPU...";
+  updateComputeStatus();
+  gpu.GpuTrainer.create().then((trainer) => {
+    gpuTrainer = trainer;
+    if (trainer == null) {
+      computeStatus = "WebGPU unavailable - using CPU";
+    } else {
+      computeStatus = "GPU " + trainer.getAdapterName();
+      if (network != null) {
+        syncGpuNetwork();
+      }
+    }
+    updateComputeStatus();
+  });
+}
+
+/** Copies the current network into the GPU backend. */
+function syncGpuNetwork() {
+  if (gpuTrainer == null || network == null) {
+    return;
+  }
+  let activation = gpu.activationId(state.activation);
+  if (activation < 0) {
+    // Custom activation: the shaders cannot evaluate it.
+    return;
+  }
+  if (gpuStepBusy) {
+    // Never reallocate GPU buffers under a step that is still in flight.
+    gpuResyncPending = true;
+    return;
+  }
+  gpuTrainer.setNetwork(network, activation,
+      gpu.activationId(getOutputActivation()),
+      gpu.regularizationId(state.regularization));
+}
+
+function updateComputeStatus() {
+  let status = d3.select("#compute-status");
+  if (status.empty()) {
+    return;
+  }
+  let label: string;
+  let active = state.computeDevice === "gpu";
+  if (!active) {
+    label = "CPU";
+  } else if (gpuTrainer == null) {
+    label = gpuInitStarted ? "WebGPU unavailable - using CPU" : "Starting GPU...";
+  } else if (!gpuCompatible()) {
+    label = "CPU fallback (custom activation)";
+  } else {
+    label = computeStatus;
+  }
+  status.text(label);
+  d3.select("#top-controls .ui-gpu-usage").classed(
+      "disabled", !active || gpuTrainer == null || !gpuCompatible());
+  d3.select("#gpu-usage").property("disabled", !active);
+}
+
+/** Packs the data points into a row-major [rows, inputs] matrix. */
+function buildInputMatrix(dataPoints: Example2D[],
+    numInputs: number): Float32Array {
+  let data = new Float32Array(dataPoints.length * numInputs);
+  for (let i = 0; i < dataPoints.length; i++) {
+    let input = constructInput(dataPoints[i].x, dataPoints[i].y);
+    for (let k = 0; k < numInputs; k++) {
+      data[i * numInputs + k] = input[k];
+    }
+  }
+  return data;
+}
+
+/** Cached input grid for the decision boundary heat maps. */
+function getGridInputs(numInputs: number): Float32Array {
+  let key = constructInputIds().join(",");
+  if (gpuGridInputs != null && gpuGridKey === key) {
+    return gpuGridInputs;
+  }
+  let xScale = d3.scale.linear().domain([0, DENSITY - 1]).range(xDomain);
+  let yScale = d3.scale.linear().domain([DENSITY - 1, 0]).range(xDomain);
+  let data = new Float32Array(DENSITY * DENSITY * numInputs);
+  let row = 0;
+  for (let i = 0; i < DENSITY; i++) {
+    for (let j = 0; j < DENSITY; j++) {
+      let input = constructInput(xScale(i), yScale(j));
+      for (let k = 0; k < numInputs; k++) {
+        data[row * numInputs + k] = input[k];
+      }
+      row++;
+    }
+  }
+  gpuGridInputs = data;
+  gpuGridKey = key;
+  return data;
+}
+
+/** Mean squared error, matching nn.Errors.SQUARE. */
+function squareLoss(output: Float32Array, target: Float32Array): number {
+  if (target.length === 0) {
+    return 0;
+  }
+  let loss = 0;
+  for (let i = 0; i < target.length; i++) {
+    let diff = output[i] - target[i];
+    loss += 0.5 * diff * diff;
+  }
+  return loss / target.length;
+}
+
+/** Fills `boundary` from the GPU activations of the sampled grid. */
+function applyGpuBoundary(layers: Float32Array[]) {
+  let xScale = d3.scale.linear().domain([0, DENSITY - 1]).range(xDomain);
+  let yScale = d3.scale.linear().domain([DENSITY - 1, 0]).range(xDomain);
+  for (let i = 0; i < DENSITY; i++) {
+    let x = xScale(i);
+    for (let j = 0; j < DENSITY; j++) {
+      let y = yScale(j);
+      for (let nodeId in INPUTS) {
+        if (boundary[nodeId] == null) {
+          boundary[nodeId] = new Array(DENSITY);
+        }
+        if (boundary[nodeId][i] == null) {
+          boundary[nodeId][i] = new Array(DENSITY);
+        }
+        boundary[nodeId][i][j] = INPUTS[nodeId].f(x, y);
+      }
+    }
+  }
+  for (let l = 1; l < network.length; l++) {
+    let layerOut = layers[l - 1];
+    let layer = network[l];
+    let n = layer.length;
+    for (let row = 0; row < DENSITY * DENSITY; row++) {
+      let i = Math.floor(row / DENSITY);
+      let j = row - i * DENSITY;
+      let base = row * n;
+      for (let k = 0; k < n; k++) {
+        let node = layer[k];
+        if (boundary[node.id] == null) {
+          boundary[node.id] = new Array(DENSITY);
+        }
+        if (boundary[node.id][i] == null) {
+          boundary[node.id][i] = new Array(DENSITY);
+        }
+        boundary[node.id][i][j] = layerOut[base + k];
+      }
+    }
+  }
+}
+
+async function gpuOneStep() {
+  // Snapshot the network and a generation id so a reset mid-step can cancel
+  // this work instead of writing old results into the new network.
+  let gen = gpuGeneration;
+  let net = network;
+  iter++;
+  let numInputs = constructInput(0, 0).length;
+  let trainInputs = buildInputMatrix(trainData, numInputs);
+  let trainTargets = new Float32Array(trainData.length);
+  trainData.forEach((point, i) => {
+    trainTargets[i] = point.label;
+  });
+  await gpuTrainer.trainEpoch(trainInputs, trainTargets, state.batchSize,
+      state.learningRate, state.regularizationRate, state.gpuUsage);
+  if (gen !== gpuGeneration) {
+    return;
+  }
+  await gpuTrainer.syncWeights(net);
+  if (gen !== gpuGeneration) {
+    return;
+  }
+
+  // Loss for the train and test splits.
+  let trainOut = await gpuTrainer.infer(trainInputs, state.gpuUsage, false);
+  if (gen !== gpuGeneration) {
+    return;
+  }
+  lossTrain = squareLoss(trainOut.final, trainTargets);
+  let testInputs = buildInputMatrix(testData, numInputs);
+  let testTargets = new Float32Array(testData.length);
+  testData.forEach((point, i) => {
+    testTargets[i] = point.label;
+  });
+  let testOut = await gpuTrainer.infer(testInputs, state.gpuUsage, false);
+  if (gen !== gpuGeneration) {
+    return;
+  }
+  lossTest = squareLoss(testOut.final, testTargets);
+
+  // Decision boundaries for the heat maps.
+  let grid = getGridInputs(numInputs);
+  let gridOut = await gpuTrainer.infer(grid, state.gpuUsage, true);
+  if (gen !== gpuGeneration) {
+    return;
+  }
+  applyGpuBoundary(gridOut.layers);
+
+  updateUI(false, true);
 }
 
 export function getOutputWeights(network: nn.Node[][]): number[] {
@@ -1035,6 +1345,7 @@ function reset(onStartup=false) {
     userHasInteracted();
   }
   player.pause();
+  gpuGeneration++;
 
   let suffix = state.numHiddenLayers !== 1 ? "s" : "";
   d3.select("#layers-label").text("Hidden layer" + suffix);
@@ -1044,10 +1355,11 @@ function reset(onStartup=false) {
   iter = 0;
   let numInputs = constructInput(0 , 0).length;
   let shape = [numInputs].concat(state.networkShape).concat([1]);
-  let outputActivation = (state.problem === Problem.REGRESSION) ?
-      nn.Activations.LINEAR : nn.Activations.TANH;
+  let outputActivation = getOutputActivation();
   network = nn.buildNetwork(shape, state.activation, outputActivation,
       state.regularization, constructInputIds(), state.initZero);
+  // Keep the GPU copy in sync with the freshly (re)initialized network.
+  syncGpuNetwork();
   lossTrain = getLoss(network, trainData);
   lossTest = getLoss(network, testData);
   drawNetwork(network);

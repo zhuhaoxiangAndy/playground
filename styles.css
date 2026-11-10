@@ -291,6 +291,49 @@ header h1 .optional {
   margin-top: 6px;
 }
 
+/* Second row: compute backend selector + GPU usage throttle. */
+#top-controls .compute-row {
+  justify-content: flex-start;
+  align-items: flex-end;
+  margin-top: 14px;
+}
+
+#top-controls .compute-row .control:first-child {
+  margin-left: 0;
+}
+
+#top-controls .compute-row .ui-gpu-usage {
+  max-width: 220px;
+}
+
+#top-controls .compute-row .ui-compute-status {
+  max-width: none;
+  min-width: 220px;
+}
+
+#top-controls .compute-row #compute-status {
+  font-size: 15px;
+  line-height: 32px;
+}
+
+#top-controls #gpu-usage {
+  width: 200px;
+  margin: 8px 0 0;
+}
+
+#top-controls .ui-gpu-usage .value {
+  font-size: 15px;
+  margin-left: 4px;
+}
+
+#top-controls .compute-row.disabled {
+  opacity: 0.45;
+}
+
+#top-controls .ui-gpu-usage.disabled {
+  opacity: 0.45;
+}
+
 #top-controls .control .label,
 #top-controls .control label {
   color: #777;

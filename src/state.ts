@@ -122,6 +122,8 @@ export class State {
     {name: "noise", type: Type.NUMBER},
     {name: "networkShape", type: Type.ARRAY_NUMBER},
     {name: "defaultNeurons", type: Type.NUMBER},
+    {name: "computeDevice", type: Type.STRING},
+    {name: "gpuUsage", type: Type.NUMBER},
     {name: "seed", type: Type.STRING},
     {name: "showTestData", type: Type.BOOLEAN},
     {name: "discretize", type: Type.BOOLEAN},
@@ -162,6 +164,8 @@ export class State {
   hiddenLayerControls: any[] = [];
   networkShape: number[] = [4, 2];
   defaultNeurons = 2;
+  computeDevice = "cpu";
+  gpuUsage = 100;
   x = true;
   y = true;
   xTimesY = false;

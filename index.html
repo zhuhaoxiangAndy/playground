@@ -148,6 +148,26 @@ limitations under the License.
         </div>
       </div>
     </div>
+    <div class="container l--page compute-row">
+      <div class="control ui-compute">
+        <label for="compute-device">Compute</label>
+        <div class="select">
+          <select id="compute-device">
+            <option value="cpu">CPU</option>
+            <option value="gpu">GPU (WebGPU)</option>
+            <option value="npu" disabled>NPU (WebNN)</option>
+          </select>
+        </div>
+      </div>
+      <div class="control ui-gpu-usage">
+        <label for="gpu-usage">GPU usage <span id="gpu-usage-value" class="value">100%</span></label>
+        <input type="range" id="gpu-usage" min="10" max="100" step="5" value="100">
+      </div>
+      <div class="control ui-compute-status">
+        <span class="label">Backend</span>
+        <span id="compute-status" class="value">CPU</span>
+      </div>
+    </div>
   </div>
 
   <!-- Main Part -->
