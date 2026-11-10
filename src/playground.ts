@@ -705,6 +705,11 @@ function drawNetwork(network: nn.Node[][]): void {
 
   // Get the width of the svg container.
   let padding = 3;
+  // Reset the width added by the previous render BEFORE measuring. Measuring
+  // first would read the stale (wider) layout of a shrinking network, which
+  // made the SVG stay too wide and overlap the output column.
+  let mainPart = d3.select("#main-part").node() as HTMLElement;
+  mainPart.style.minWidth = "";
   let co = d3.select(".column.output").node() as HTMLDivElement;
   let cf = d3.select(".column.features").node() as HTMLDivElement;
   let width = co.offsetLeft - cf.offsetLeft;
@@ -716,8 +721,6 @@ function drawNetwork(network: nn.Node[][]): void {
   // Grow the page layout when there are many hidden layers, so that the
   // plus/minus controls and the neuron canvases never overlap. The extra
   // width is distributed to the columns by the flex layout.
-  let mainPart = d3.select("#main-part").node() as HTMLElement;
-  mainPart.style.minWidth = "";
   let requiredWidth = featureWidth + RECT_SIZE +
       Math.max(0, numHiddenLayers - 1) * MIN_LAYER_SPACING;
   for (let i = 0; i < 5 && requiredWidth > width; i++) {

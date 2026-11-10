@@ -306,11 +306,6 @@ header h1 .optional {
   max-width: 220px;
 }
 
-#top-controls .compute-row .ui-compute-status {
-  max-width: none;
-  min-width: 220px;
-}
-
 #top-controls .compute-row #compute-status {
   font-size: 15px;
   line-height: 32px;
@@ -332,6 +327,39 @@ header h1 .optional {
 
 #top-controls .ui-gpu-usage.disabled {
   opacity: 0.45;
+}
+
+/* Layer count control: pinned in the top bar so it never moves. */
+#top-controls .ui-hiddenLayers {
+  max-width: 190px;
+  min-width: 190px;
+}
+
+#top-controls .ui-hiddenLayers .layer-count {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: flex;
+  align-items: center;
+}
+
+#top-controls .ui-hiddenLayers .mdl-button {
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  color: #777;
+}
+
+#top-controls .ui-hiddenLayers .mdl-button .material-icons {
+  font-size: 20px;
+}
+
+#top-controls .ui-hiddenLayers #num-layers {
+  font-size: 24px;
+  font-weight: 300;
+  min-width: 34px;
+  text-align: center;
 }
 
 #top-controls .control .label,
@@ -677,7 +705,7 @@ g.column rect {
   position: absolute;
   text-align: center;
   line-height: 28px;
-  top: -58px;
+  top: -48px;
   width: 65px;
   height: 44px;
   font-size: 12px;

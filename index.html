@@ -68,6 +68,18 @@ limitations under the License.
           <i class="material-icons">skip_next</i>
         </button>
       </div>
+      <div class="control ui-hiddenLayers">
+        <label>Hidden layers</label>
+        <div class="layer-count">
+          <button id="add-layers" class="mdl-button mdl-js-button mdl-button--icon" title="Add a hidden layer">
+            <i class="material-icons">add</i>
+          </button>
+          <span id="num-layers" class="value"></span>
+          <button id="remove-layers" class="mdl-button mdl-js-button mdl-button--icon" title="Remove a hidden layer">
+            <i class="material-icons">remove</i>
+          </button>
+        </div>
+      </div>
       <div class="control">
         <span class="label">Epoch</span>
         <span class="value" id="iter-number"></span>
@@ -275,38 +287,29 @@ limitations under the License.
     <!-- Hidden Layers Column -->
     <div class="column hidden-layers">
       <h4>
-        <div class="ui-numHiddenLayers">
-          <button id="add-layers" class="mdl-button mdl-js-button mdl-button--icon">
-            <i class="material-icons">add</i>
-          </button>
-          <button id="remove-layers" class="mdl-button mdl-js-button mdl-button--icon">
-            <i class="material-icons">remove</i>
-          </button>
-        </div>
-        <span id="num-layers"></span>
         <span id="layers-label"></span>
       </h4>
       <div class="layer-options">
         <div class="layer-option ui-defaultNeurons">
-          <label for="default-neurons">New layer neurons</label>
+          <label for="default-neurons" title="Neurons in every newly created hidden layer">Neurons</label>
           <input id="default-neurons" type="number" min="1" step="1" value="2">
         </div>
-        <div class="layer-option ui-batchLayers">
+        <div class="layer-option ui-batchLayers"
+             title="Add N hidden layers, each with M neurons">
           <label for="batch-layers">Add</label>
           <input id="batch-layers" type="number" min="1" step="1" value="1">
-          <span>layers &times;</span>
+          <span>&times;</span>
           <input id="batch-neurons" type="number" min="1" step="1" value="2">
-          <span>neurons</span>
           <button id="batch-add-layers"
               class="mdl-button mdl-js-button mdl-button--raised"
               type="button">Add</button>
         </div>
-        <div class="layer-option ui-batchDelete">
+        <div class="layer-option ui-batchDelete"
+             title="Delete the last N hidden layers, then remove M neurons from every remaining layer">
           <label for="delete-layers">Delete</label>
           <input id="delete-layers" type="number" min="1" step="1" value="1">
-          <span>layers &times;</span>
+          <span>&times;</span>
           <input id="delete-neurons" type="number" min="0" step="1" value="1">
-          <span>neurons per layer</span>
           <button id="batch-delete-layers"
               class="mdl-button mdl-js-button mdl-button--raised"
               type="button">Delete</button>
