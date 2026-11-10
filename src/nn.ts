@@ -136,6 +136,44 @@ export class Activations {
   };
 }
 
+/**
+ * Creates an activation function from a user-supplied JavaScript expression.
+ * The expression may use `x` directly (e.g. "x * x") or be an arrow function
+ * (e.g. "x => Math.max(0, x)"). Returns null if the expression is invalid.
+ */
+export function createCustomActivation(
+    expression: string): ActivationFunction {
+  if (expression == null || expression.trim() === "") {
+    return null;
+  }
+  let fn: (x: number) => number;
+  try {
+    let body = expression.trim();
+    body = body.indexOf("=>") === -1 ?
+        `return (${body});` : `return (${body})(x);`;
+    // tslint:disable-next-line:no-eval
+    fn = new Function("x", body) as (x: number) => number;
+    let test = fn(0.5);
+    if (typeof test !== "number" || !isFinite(test)) {
+      return null;
+    }
+  } catch (e) {
+    return null;
+  }
+  let output = (x: number) => {
+    let y = fn(x);
+    return isFinite(y) ? y : 0;
+  };
+  return {
+    output: output,
+    // Central-difference derivative, so users only need to provide f(x).
+    der: (x: number) => {
+      let h = 1e-4;
+      return (output(x + h) - output(x - h)) / (2 * h);
+    }
+  };
+}
+
 /** Build-in regularization functions */
 export class RegularizationFunction {
   public static L1: RegularizationFunction = {

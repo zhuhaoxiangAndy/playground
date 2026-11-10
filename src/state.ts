@@ -19,12 +19,19 @@ import * as dataset from "./dataset";
 /** Suffix added to the state when storing if a control is hidden or not. */
 const HIDE_STATE_SUFFIX = "_hide";
 
+/** Placeholder replaced with the user-defined function on deserialization. */
+let customActivationPlaceholder: nn.ActivationFunction = {
+  output: x => x,
+  der: x => 1
+};
+
 /** A map between names and activation functions. */
 export let activations: {[key: string]: nn.ActivationFunction} = {
   "relu": nn.Activations.RELU,
   "tanh": nn.Activations.TANH,
   "sigmoid": nn.Activations.SIGMOID,
-  "linear": nn.Activations.LINEAR
+  "linear": nn.Activations.LINEAR,
+  "custom": customActivationPlaceholder
 };
 
 /** A map between names and regularization functions. */
@@ -105,6 +112,7 @@ export class State {
 
   private static PROPS: Property[] = [
     {name: "activation", type: Type.OBJECT, keyMap: activations},
+    {name: "customActivation", type: Type.STRING},
     {name: "regularization", type: Type.OBJECT, keyMap: regularizations},
     {name: "batchSize", type: Type.NUMBER},
     {name: "dataset", type: Type.OBJECT, keyMap: datasets},
@@ -143,6 +151,7 @@ export class State {
   tutorial: string = null;
   percTrainData = 50;
   activation = nn.Activations.TANH;
+  customActivation = "x / (1 + Math.exp(-x))";
   regularization: nn.RegularizationFunction = null;
   problem = Problem.CLASSIFICATION;
   initZero = false;
@@ -203,7 +212,11 @@ export class State {
           break;
         case Type.STRING:
           if (hasKey(name)) {
-            state[name] = map[name];
+            try {
+              state[name] = decodeURIComponent(map[name]);
+            } catch (e) {
+              state[name] = map[name];
+            }
           }
           break;
         case Type.BOOLEAN:
@@ -231,6 +244,15 @@ export class State {
       state[prop] = (map[prop] === "true") ? true : false;
     });
     state.numHiddenLayers = state.networkShape.length;
+    if (map["activation"] === "custom") {
+      let custom = nn.createCustomActivation(state.customActivation);
+      if (custom == null) {
+        state.activation = nn.Activations.TANH;
+      } else {
+        activations["custom"] = custom;
+        state.activation = custom;
+      }
+    }
     if (state.seed == null) {
       state.seed = Math.random().toFixed(5);
     }
@@ -252,6 +274,8 @@ export class State {
       }
       if (type === Type.OBJECT) {
         value = getKeyFromValue(keyMap, value);
+      } else if (type === Type.STRING) {
+        value = encodeURIComponent(value);
       } else if (type === Type.ARRAY_NUMBER ||
           type === Type.ARRAY_STRING) {
         value = value.join(",");

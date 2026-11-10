@@ -98,7 +98,17 @@ limitations under the License.
             <option value="tanh">Tanh</option>
             <option value="sigmoid">Sigmoid</option>
             <option value="linear">Linear</option>
+            <option value="custom">Custom</option>
           </select>
+        </div>
+        <div id="custom-activation-control" class="custom-activation">
+          <input id="custom-activation" type="text" spellcheck="false"
+              placeholder="f(x), e.g. x * x">
+          <button id="apply-custom-activation"
+              class="mdl-button mdl-js-button mdl-button--raised"
+              type="button">Apply</button>
+          <div id="custom-activation-error"
+              class="custom-activation-error"></div>
         </div>
       </div>
       <div class="control ui-regularization">

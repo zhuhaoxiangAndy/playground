@@ -330,6 +330,45 @@ header h1 .optional {
   border-bottom-color: #183D4E;
 }
 
+#top-controls .control .custom-activation {
+  margin-top: 8px;
+}
+
+#top-controls .control .custom-activation input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: none;
+  border: none;
+  border-bottom: solid 1px #ccc;
+  border-radius: 0;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #333;
+  outline: none;
+}
+
+#top-controls .control .custom-activation input:focus {
+  border-bottom-color: #183D4E;
+}
+
+#top-controls .control .custom-activation button {
+  margin-top: 6px;
+  min-width: 0;
+  height: 24px;
+  line-height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+#top-controls .control .custom-activation-error {
+  display: none;
+  margin-top: 4px;
+  color: #c0392b;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 #top-controls .control .select::after {
   class: "material-icons";
   content: "arrow_drop_down";

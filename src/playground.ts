@@ -318,7 +318,44 @@ function makeGUI() {
   batchSize.property("value", state.batchSize);
   d3.select("label[for='batchSize'] .value").text(state.batchSize);
 
+  let customActivationControl = d3.select("#custom-activation-control");
+  let customActivationInput = d3.select("#custom-activation");
+  let customActivationError = d3.select("#custom-activation-error");
+  customActivationInput.property("value", state.customActivation);
+  customActivationControl.style("display",
+      state.activation === activations["custom"] ? null : "none");
+
+  let applyCustomActivation = () => {
+    let expression =
+        (customActivationInput.property("value") as string).trim();
+    let activation = nn.createCustomActivation(expression);
+    if (activation == null) {
+      customActivationError.style("display", "block")
+          .text("Invalid expression: use JavaScript in x, e.g. x * x.");
+      return;
+    }
+    customActivationError.style("display", "none").text("");
+    state.customActivation = expression;
+    activations["custom"] = activation;
+    state.activation = activation;
+    parametersChanged = true;
+    reset();
+  };
+
+  d3.select("#apply-custom-activation").on("click", applyCustomActivation);
+  customActivationInput.on("keypress", () => {
+    if ((d3.event as any).keyCode === 13) {
+      applyCustomActivation();
+    }
+  });
+
   let activationDropdown = d3.select("#activations").on("change", function() {
+    if (this.value === "custom") {
+      customActivationControl.style("display", null);
+      applyCustomActivation();
+      return;
+    }
+    customActivationControl.style("display", "none");
     state.activation = activations[this.value];
     parametersChanged = true;
     reset();
