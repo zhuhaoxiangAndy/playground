@@ -121,6 +121,7 @@ export class State {
     {name: "regularizationRate", type: Type.NUMBER},
     {name: "noise", type: Type.NUMBER},
     {name: "networkShape", type: Type.ARRAY_NUMBER},
+    {name: "defaultNeurons", type: Type.NUMBER},
     {name: "seed", type: Type.STRING},
     {name: "showTestData", type: Type.BOOLEAN},
     {name: "discretize", type: Type.BOOLEAN},
@@ -160,6 +161,7 @@ export class State {
   numHiddenLayers = 1;
   hiddenLayerControls: any[] = [];
   networkShape: number[] = [4, 2];
+  defaultNeurons = 2;
   x = true;
   y = true;
   xTimesY = false;

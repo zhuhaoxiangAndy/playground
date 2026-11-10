@@ -785,6 +785,50 @@ g.column rect {
   width: 40%;
 }
 
+.layer-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px 16px;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 300;
+  color: #777;
+}
+
+.layer-options .layer-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.layer-options .layer-option input[type="number"] {
+  width: 44px;
+  padding: 3px 2px;
+  background: none;
+  border: none;
+  border-bottom: solid 1px #ccc;
+  border-radius: 0;
+  color: #333;
+  font-size: 13px;
+  outline: none;
+}
+
+.layer-options .layer-option input[type="number"]:focus {
+  border-bottom-color: #183D4E;
+}
+
+#main-part .layer-options .mdl-button {
+  width: auto;
+  min-width: 0;
+  height: 26px;
+  line-height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 #main-part .hidden-layers h4 {
   -webkit-justify-content: center;
   justify-content: center;

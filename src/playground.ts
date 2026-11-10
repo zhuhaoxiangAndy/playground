@@ -52,6 +52,8 @@ const BIAS_SIZE = 5;
 const NUM_SAMPLES_CLASSIFY = 500;
 const NUM_SAMPLES_REGRESS = 1200;
 const DENSITY = 100;
+/** Minimum horizontal distance between two hidden layers. */
+const MIN_LAYER_SPACING = 68;
 
 enum HoverType {
   BIAS, WEIGHT
@@ -244,11 +246,24 @@ function makeGUI() {
   d3.select(`canvas[data-regDataset=${regDatasetKey}]`)
     .classed("selected", true);
 
-  d3.select("#add-layers").on("click", () => {
-    state.networkShape[state.numHiddenLayers] = 2;
-    state.numHiddenLayers++;
+  if (!(state.defaultNeurons >= 1)) {
+    state.defaultNeurons = 2;
+  }
+  state.defaultNeurons = Math.floor(state.defaultNeurons);
+
+  let addHiddenLayers = (count: number, neurons: number) => {
+    count = Math.max(1, Math.floor(count) || 1);
+    neurons = Math.max(1, Math.floor(neurons) || 1);
+    for (let i = 0; i < count; i++) {
+      state.networkShape[state.numHiddenLayers] = neurons;
+      state.numHiddenLayers++;
+    }
     parametersChanged = true;
     reset();
+  };
+
+  d3.select("#add-layers").on("click", () => {
+    addHiddenLayers(1, state.defaultNeurons);
   });
 
   d3.select("#remove-layers").on("click", () => {
@@ -259,6 +274,32 @@ function makeGUI() {
     state.networkShape.splice(state.numHiddenLayers);
     parametersChanged = true;
     reset();
+  });
+
+  d3.select("#default-neurons")
+    .property("value", state.defaultNeurons)
+    .on("change", function() {
+      let value = Math.max(1, Math.floor(+this.value) || 1);
+      state.defaultNeurons = value;
+      this.value = value;
+      state.serialize();
+      userHasInteracted();
+    });
+
+  let batchLayers = d3.select("#batch-layers").property("value", 1);
+  let batchNeurons = d3.select("#batch-neurons")
+      .property("value", state.defaultNeurons);
+  let addBatchLayers = () => {
+    addHiddenLayers(+batchLayers.property("value"),
+        +batchNeurons.property("value"));
+  };
+  d3.select("#batch-add-layers").on("click", addBatchLayers);
+  [batchLayers, batchNeurons].forEach(input => {
+    input.on("keypress", () => {
+      if ((d3.event as any).keyCode === 13) {
+        addBatchLayers();
+      }
+    });
   });
 
   let showTestData = d3.select("#show-test-data").on("change", function() {
@@ -582,21 +623,41 @@ function drawNetwork(network: nn.Node[][]): void {
   let co = d3.select(".column.output").node() as HTMLDivElement;
   let cf = d3.select(".column.features").node() as HTMLDivElement;
   let width = co.offsetLeft - cf.offsetLeft;
+  // Draw the network layer by layer.
+  let numLayers = network.length;
+  let featureWidth = 118;
+  let numHiddenLayers = Math.max(0, numLayers - 2);
+
+  // Grow the page layout when there are many hidden layers, so that the
+  // plus/minus controls and the neuron canvases never overlap. The extra
+  // width is distributed to the columns by the flex layout.
+  let mainPart = d3.select("#main-part").node() as HTMLElement;
+  mainPart.style.minWidth = "";
+  let requiredWidth = featureWidth + RECT_SIZE +
+      Math.max(0, numHiddenLayers - 1) * MIN_LAYER_SPACING;
+  for (let i = 0; i < 5 && requiredWidth > width; i++) {
+    mainPart.style.minWidth =
+        `${mainPart.offsetWidth + Math.ceil(requiredWidth - width)}px`;
+    width = co.offsetLeft - cf.offsetLeft;
+  }
   svg.attr("width", width);
+
+  let layerSpacing = numHiddenLayers > 1 ?
+      Math.max(MIN_LAYER_SPACING,
+          (width - RECT_SIZE - featureWidth) / (numHiddenLayers - 1)) : 0;
+  let layerX = (layerIdx: number) => {
+    if (numHiddenLayers <= 1) {
+      return (featureWidth + width - RECT_SIZE) / 2;
+    }
+    return featureWidth + (layerIdx - 1) * layerSpacing;
+  };
+  let nodeIndexScale = (nodeIndex: number) => nodeIndex * (RECT_SIZE + 25);
 
   // Map of all node coordinates.
   let node2coord: {[id: string]: {cx: number, cy: number}} = {};
   let container = svg.append("g")
     .classed("core", true)
     .attr("transform", `translate(${padding},${padding})`);
-  // Draw the network layer by layer.
-  let numLayers = network.length;
-  let featureWidth = 118;
-  let layerScale = d3.scale.ordinal<number, number>()
-      .domain(d3.range(1, numLayers - 1))
-      .rangePoints([featureWidth, width - RECT_SIZE], 0.7);
-  let nodeIndexScale = (nodeIndex: number) => nodeIndex * (RECT_SIZE + 25);
-
 
   let calloutThumb = d3.select(".callout.thumbnail").style("display", "none");
   let calloutWeights = d3.select(".callout.weights").style("display", "none");
@@ -616,9 +677,9 @@ function drawNetwork(network: nn.Node[][]): void {
   // Draw the intermediate layers.
   for (let layerIdx = 1; layerIdx < numLayers - 1; layerIdx++) {
     let numNodes = network[layerIdx].length;
-    let cx = layerScale(layerIdx) + RECT_SIZE / 2;
+    let cx = layerX(layerIdx) + RECT_SIZE / 2;
     maxY = Math.max(maxY, nodeIndexScale(numNodes));
-    addPlusMinusControl(layerScale(layerIdx), layerIdx);
+    addPlusMinusControl(layerX(layerIdx), layerIdx);
     for (let i = 0; i < numNodes; i++) {
       let node = network[layerIdx][i];
       let cy = nodeIndexScale(i) + RECT_SIZE / 2;

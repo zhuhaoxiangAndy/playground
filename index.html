@@ -266,6 +266,22 @@ limitations under the License.
         <span id="num-layers"></span>
         <span id="layers-label"></span>
       </h4>
+      <div class="layer-options">
+        <div class="layer-option ui-defaultNeurons">
+          <label for="default-neurons">New layer neurons</label>
+          <input id="default-neurons" type="number" min="1" step="1" value="2">
+        </div>
+        <div class="layer-option ui-batchLayers">
+          <label for="batch-layers">Add</label>
+          <input id="batch-layers" type="number" min="1" step="1" value="1">
+          <span>layers &times;</span>
+          <input id="batch-neurons" type="number" min="1" step="1" value="2">
+          <span>neurons</span>
+          <button id="batch-add-layers"
+              class="mdl-button mdl-js-button mdl-button--raised"
+              type="button">Add</button>
+        </div>
+      </div>
       <div class="bracket"></div>
     </div>
 
