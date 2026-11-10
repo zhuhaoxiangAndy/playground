@@ -301,6 +301,16 @@ limitations under the License.
               class="mdl-button mdl-js-button mdl-button--raised"
               type="button">Add</button>
         </div>
+        <div class="layer-option ui-batchDelete">
+          <label for="delete-layers">Delete</label>
+          <input id="delete-layers" type="number" min="1" step="1" value="1">
+          <span>layers &times;</span>
+          <input id="delete-neurons" type="number" min="0" step="1" value="1">
+          <span>neurons per layer</span>
+          <button id="batch-delete-layers"
+              class="mdl-button mdl-js-button mdl-button--raised"
+              type="button">Delete</button>
+        </div>
       </div>
       <div class="bracket"></div>
     </div>

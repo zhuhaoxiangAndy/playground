@@ -277,6 +277,28 @@ function makeGUI() {
     reset();
   };
 
+  /**
+   * Removes the last `count` hidden layers, then takes `neurons` neurons away
+   * from every remaining hidden layer (a layer always keeps at least one).
+   */
+  let removeHiddenLayers = (count: number, neurons: number) => {
+    count = Math.max(1, Math.floor(count) || 1);
+    neurons = Math.max(0, Math.floor(neurons) || 0);
+    let removed = Math.min(count, state.numHiddenLayers);
+    if (removed === 0 && neurons === 0) {
+      return;
+    }
+    state.numHiddenLayers -= removed;
+    state.networkShape.splice(state.numHiddenLayers);
+    if (neurons > 0) {
+      for (let i = 0; i < state.numHiddenLayers; i++) {
+        state.networkShape[i] = Math.max(1, state.networkShape[i] - neurons);
+      }
+    }
+    parametersChanged = true;
+    reset();
+  };
+
   d3.select("#add-layers").on("click", () => {
     addHiddenLayers(1, state.defaultNeurons);
   });
@@ -313,6 +335,21 @@ function makeGUI() {
     input.on("keypress", () => {
       if ((d3.event as any).keyCode === 13) {
         addBatchLayers();
+      }
+    });
+  });
+
+  let deleteLayers = d3.select("#delete-layers").property("value", 1);
+  let deleteNeurons = d3.select("#delete-neurons").property("value", 1);
+  let removeBatchLayers = () => {
+    removeHiddenLayers(+deleteLayers.property("value"),
+        +deleteNeurons.property("value"));
+  };
+  d3.select("#batch-delete-layers").on("click", removeBatchLayers);
+  [deleteLayers, deleteNeurons].forEach(input => {
+    input.on("keypress", () => {
+      if ((d3.event as any).keyCode === 13) {
+        removeBatchLayers();
       }
     });
   });
