@@ -245,9 +245,6 @@ function makeGUI() {
     .classed("selected", true);
 
   d3.select("#add-layers").on("click", () => {
-    if (state.numHiddenLayers >= 6) {
-      return;
-    }
     state.networkShape[state.numHiddenLayers] = 2;
     state.numHiddenLayers++;
     parametersChanged = true;
@@ -669,10 +666,6 @@ function addPlusMinusControl(x: number, layerIdx: number) {
   firstRow.append("button")
       .attr("class", "mdl-button mdl-js-button mdl-button--icon")
       .on("click", () => {
-        let numNeurons = state.networkShape[i];
-        if (numNeurons >= 8) {
-          return;
-        }
         state.networkShape[i]++;
         parametersChanged = true;
         reset();
